@@ -730,22 +730,19 @@ public class TinyDisplayService extends Service {
         Notification notification = buildForegroundNotification();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
-                if (camera) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-                startForeground(NOTIFICATION_ID, notification, type);
+                // Do NOT request FOREGROUND_SERVICE_TYPE_CAMERA here. Android 14+
+                // rejects camera FGS type when camera mode is entered from rear
+                // touch/background service state, killing the renderer thread.
+                // Keep this service as specialUse only; CameraStreamer handles
+                // camera permission/errors separately.
+                startForeground(NOTIFICATION_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
             return true;
-        } catch (SecurityException | IllegalArgumentException e) {
-            Log.w(TAG, "Foreground service type update denied (camera=" + camera + ")", e);
-            if (camera) {
-                try {
-                    startForeground(NOTIFICATION_ID, notification,
-                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                                    ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0);
-                } catch (Exception ignored) {}
-            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Foreground service update denied (camera=" + camera + ")", e);
             return false;
         }
     }
