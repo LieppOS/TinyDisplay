@@ -101,9 +101,9 @@ static void send_swipe(int sx, int sy, int ex, int ey) {
     send("com.tinydisplay.action.REAR_SWIPE", e);
 }
 
-static void send_f2_photo() {
-    LOGI("F2 pressed -> photo");
-    send("com.tinydisplay.action.F2_PHOTO", "");
+static void send_key(int code) {
+    if (code == KEY_F1) { LOGI("F1 pressed"); send("com.tinydisplay.action.KEY_F1", ""); }
+    else if (code == KEY_F2) { LOGI("F2 pressed"); send("com.tinydisplay.action.KEY_F2", ""); }
 }
 
 static long ms_between(const struct timeval* a, const struct timeval* b) {
@@ -152,7 +152,7 @@ static void handle_touch_event(TouchState& st, const struct input_event& ev) {
 }
 
 static void handle_key_event(const struct input_event& ev) {
-    if (ev.type == EV_KEY && ev.code == KEY_F2 && ev.value == 1) send_f2_photo();
+    if (ev.type == EV_KEY && ev.value == 1 && (ev.code == KEY_F1 || ev.code == KEY_F2)) send_key(ev.code);
 }
 
 int main() {

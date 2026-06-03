@@ -24,6 +24,17 @@
         <item>2</item>
     </string-array>
 
+    <string-array name="photo_key_entries">
+        <item>Off</item>
+        <item>F1 button</item>
+        <item>F2 button</item>
+    </string-array>
+    <string-array name="photo_key_values">
+        <item>none</item>
+        <item>f1</item>
+        <item>f2</item>
+    </string-array>
+
     <string-array name="gesture_entries">
         <item>Nothing</item>
         <item>Toggle power</item>

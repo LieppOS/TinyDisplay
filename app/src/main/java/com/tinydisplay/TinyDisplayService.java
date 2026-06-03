@@ -15,6 +15,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -56,6 +57,8 @@ public class TinyDisplayService extends Service {
     public static final String ACTION_REAR_LONGPRESS = "com.tinydisplay.action.REAR_LONGPRESS";
     public static final String ACTION_REAR_SWIPE = "com.tinydisplay.action.REAR_SWIPE";
     public static final String ACTION_F2_PHOTO = "com.tinydisplay.action.F2_PHOTO";
+    public static final String ACTION_KEY_F1 = "com.tinydisplay.action.KEY_F1";
+    public static final String ACTION_KEY_F2 = "com.tinydisplay.action.KEY_F2";
     public static final String EXTRA_TOUCH_X = "x";
     public static final String EXTRA_TOUCH_Y = "y";
     public static final String EXTRA_TOUCH_START_X = "sx";
@@ -120,8 +123,7 @@ public class TinyDisplayService extends Service {
     // Double-tap bookkeeping.
     private long lastTapTime = 0;
     private Runnable pendingSingleTap;
-    private boolean captureNextCameraFrame = false;
-    private boolean startCameraFrontOnce = false;
+    private boolean photoInProgress = false;
 
     private SharedPreferences prefs;
     private SensorManager sensorManager;
@@ -544,13 +546,7 @@ public class TinyDisplayService extends Service {
         pushFrame(RawFontRenderer.renderText("CAMERA", 6));
         cameraStreamer = new CameraStreamer(this, new CameraStreamer.FrameSink() {
             @Override public void onFrame(byte[] frame) {
-                renderHandler.post(() -> {
-                    if (captureNextCameraFrame) {
-                        captureNextCameraFrame = false;
-                        saveCameraFrame(frame);
-                    }
-                    if (cameraMode) pushFrame(frame);
-                });
+                renderHandler.post(() -> { if (cameraMode) pushFrame(frame); });
             }
             @Override public void onError(String message, Throwable t) {
                 Log.w(TAG, message, t);
@@ -558,10 +554,6 @@ public class TinyDisplayService extends Service {
             }
         });
         try {
-            if (startCameraFrontOnce) {
-                startCameraFrontOnce = false;
-                cameraStreamer.useFrontCamera();
-            }
             cameraStreamer.start();
             Log.i(TAG, "Camera mode started");
         } catch (SecurityException e) {
@@ -578,61 +570,47 @@ public class TinyDisplayService extends Service {
     private void stopCameraModeLocked() {
         if (!cameraMode && cameraStreamer == null) return;
         cameraMode = false;
-        captureNextCameraFrame = false;
         updateForegroundType(false);
         if (cameraStreamer != null) { cameraStreamer.stop(); cameraStreamer = null; }
         Log.i(TAG, "Camera mode stopped");
     }
 
-    private void takeF2Selfie() {
-        Log.i(TAG, "F2 photo requested");
-        pocketCovered = false;
-        if (!subScreenPowered) powerOnSubScreen();
-        if (currentPage != PAGE_CAMERA) {
-            startCameraFrontOnce = true;
-            setPage(PAGE_CAMERA);
-        } else if (cameraStreamer != null) {
-            cameraStreamer.useFrontCamera();
-        }
-        captureNextCameraFrame = true;
-        pushFrame(RawFontRenderer.renderText("PHOTO", 5));
+    /** Handle an F1/F2 hardware key; capture a real photo if it is the chosen shutter. */
+    private void onShutterKey(String which) {
+        String key = prefs.getString("photo_key", "f2");
+        if (!which.equals(key)) { Log.i(TAG, "Key " + which + " ignored (shutter=" + key + ")"); return; }
+        renderHandler.post(this::takePhoto);
     }
 
-    private void saveCameraFrame(byte[] frame) {
-        if (frame == null) return;
-        try {
-            Bitmap bmp = Bitmap.createBitmap(RawFontRenderer.W, RawFontRenderer.H, Bitmap.Config.RGB_565);
-            int[] pixels = new int[RawFontRenderer.W * RawFontRenderer.H];
-            for (int y = 0; y < RawFontRenderer.H; y++) {
-                for (int x = 0; x < RawFontRenderer.W; x++) {
-                    int i = ((y * RawFontRenderer.W) + x) * 2;
-                    int rgb565 = ((frame[i] & 0xff) << 8) | (frame[i + 1] & 0xff);
-                    int r = ((rgb565 >> 11) & 0x1f) << 3;
-                    int g = ((rgb565 >> 5) & 0x3f) << 2;
-                    int b = (rgb565 & 0x1f) << 3;
-                    pixels[y * RawFontRenderer.W + x] = 0xff000000 | (r << 16) | (g << 8) | b;
-                }
+    private void takePhoto() {
+        if (photoInProgress) return;
+        photoInProgress = true;
+        Log.i(TAG, "Photo requested");
+        pocketCovered = false;
+        if (!subScreenPowered) powerOnSubScreen();
+        stopCameraModeLocked();
+        pushFrame(RawFontRenderer.renderText("PHOTO", 5));
+        int facing = CameraCharacteristics.LENS_FACING_FRONT;
+        PhotoCapturer.capture(this, facing, new PhotoCapturer.Result() {
+            @Override public void onSaved(Uri uri) {
+                Log.i(TAG, "Photo saved: " + uri);
+                renderHandler.post(() -> {
+                    photoInProgress = false;
+                    pushFrame(RawFontRenderer.renderText("SAVED", 5));
+                    currentPage = PAGE_CLOCK;
+                    scheduleClockUpdate(1500);
+                });
             }
-            bmp.setPixels(pixels, 0, RawFontRenderer.W, 0, 0, RawFontRenderer.W, RawFontRenderer.H);
-            ContentValues v = new ContentValues();
-            v.put(MediaStore.Images.Media.DISPLAY_NAME, "TinyDisplay_" + System.currentTimeMillis() + ".png");
-            v.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/TinyDisplay");
+            @Override public void onError(String message, Throwable t) {
+                Log.w(TAG, "Photo failed: " + message, t);
+                renderHandler.post(() -> {
+                    photoInProgress = false;
+                    pushFrame(RawFontRenderer.renderText("PHOTO ERR", 3));
+                    currentPage = PAGE_CLOCK;
+                    scheduleClockUpdate(1500);
+                });
             }
-            Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) throw new IllegalStateException("MediaStore insert returned null");
-            try (OutputStream out = getContentResolver().openOutputStream(uri)) {
-                if (out == null || !bmp.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                    throw new IllegalStateException("PNG write failed");
-                }
-            }
-            Log.i(TAG, "F2 photo saved: " + uri);
-            pushFrame(RawFontRenderer.renderText("SAVED", 5));
-        } catch (Throwable t) {
-            Log.w(TAG, "F2 photo save failed", t);
-            pushFrame(RawFontRenderer.renderText("SAVE ERR", 4));
-        }
+        });
     }
 
     // ── External notifications + glance ──────────────────────────────
@@ -906,11 +884,8 @@ public class TinyDisplayService extends Service {
                     intent.getStringExtra(EXTRA_NOTIF_TITLE), intent.getStringExtra(EXTRA_NOTIF_TEXT));
             return START_STICKY;
         }
-        if (ACTION_F2_PHOTO.equals(action)) {
-            if (prefs.getBoolean("f2_photo_enabled", true)) renderHandler.post(this::takeF2Selfie);
-            else Log.i(TAG, "F2 photo ignored: disabled in settings");
-            return START_STICKY;
-        }
+        if (ACTION_KEY_F1.equals(action)) { onShutterKey("f1"); return START_STICKY; }
+        if (ACTION_KEY_F2.equals(action) || ACTION_F2_PHOTO.equals(action)) { onShutterKey("f2"); return START_STICKY; }
         if (ACTION_PREVIEW.equals(action)) {
             renderHandler.post(() -> {
                 pocketCovered = false;

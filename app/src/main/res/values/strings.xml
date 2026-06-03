@@ -39,8 +39,8 @@
     <string name="pref_aod_summary">Show a dim clock instead of turning the sub-screen fully off</string>
     <string name="pref_pocket">Pocket / cover detection</string>
     <string name="pref_pocket_summary">Turn the sub-screen off when the proximity sensor is covered</string>
-    <string name="pref_f2_photo">F2 selfie photo</string>
-    <string name="pref_f2_photo_summary">When the hardware F2 button is pressed, open the front camera and save a TinyDisplay photo</string>
+    <string name="pref_photo_key">Photo button</string>
+    <string name="pref_photo_key_summary">Hardware key that snaps a front-camera selfie</string>
 
     <!-- Gestures -->
     <string name="pref_cat_gestures">Rear-touch gestures</string>
