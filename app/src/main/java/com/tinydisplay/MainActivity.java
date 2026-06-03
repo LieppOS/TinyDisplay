@@ -5,26 +5,19 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
-import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.appcompat.widget.Toolbar;
 
-import com.google.android.material.button.MaterialButton;
-
 /**
  * Launcher dashboard for TinyDisplay.
  *
- * Shows notification-access status (required for the notification mirroring
- * feature), a one-tap preview action, and embeds the full settings screen so
- * all toggles live in one place.
+ * Shows a live mirror of the rear sub-screen and embeds the full settings list
+ * (notification access lives at the bottom of that list).
  */
 public class MainActivity extends AppCompatActivity {
 
-    private TextView notifStatus;
-    private MaterialButton notifButton;
     private SubScreenMirrorView mirror;
 
     @Override
@@ -40,9 +33,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         mirror = findViewById(R.id.mirror);
-        notifStatus = findViewById(R.id.notif_status);
-        notifButton = findViewById(R.id.notif_button);
-        notifButton.setOnClickListener(v -> openNotificationAccess());
         requestCameraPermissionIfNeeded();
 
         if (savedInstanceState == null) {
@@ -56,7 +46,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        refreshNotificationAccess();
         TinyDisplayService.setFrameListener(frame -> {
             if (mirror != null) mirror.update(frame);
         });
@@ -72,35 +61,10 @@ public class MainActivity extends AppCompatActivity {
         TinyDisplayService.setFrameListener(null);
     }
 
-    private void refreshNotificationAccess() {
-        boolean granted = isNotificationAccessGranted();
-        notifStatus.setText(granted
-                ? R.string.dash_notif_access_granted
-                : R.string.dash_notif_access_needed);
-        // Permissions row stays visible at all times; the button just opens the
-        // system notification-access screen.
-        notifButton.setText(granted ? R.string.dash_manage_access : R.string.dash_grant_access);
-    }
-
-    private boolean isNotificationAccessGranted() {
-        String flat = Settings.Secure.getString(getContentResolver(),
-                "enabled_notification_listeners");
-        return flat != null && flat.contains(getPackageName());
-    }
-
     private void requestCameraPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
                 && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 29);
         }
     }
-
-    private void openNotificationAccess() {
-        try {
-            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
-        } catch (Exception e) {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
-        }
-    }
-
 }

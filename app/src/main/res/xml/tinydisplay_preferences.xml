@@ -170,4 +170,16 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="@string/pref_cat_permissions"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="notification_access"
+            android:title="@string/dash_notif_access_title"
+            android:persistent="false"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

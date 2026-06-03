@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Build;
+import android.provider.Settings;
 import android.util.TypedValue;
 import android.view.MenuItem;
 import android.view.View;
@@ -44,6 +45,18 @@ public class TinyDisplaySettingsActivity extends AppCompatActivity {
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.tinydisplay_preferences, rootKey);
             updateBrightnessSummary();
+            Preference notif = findPreference("notification_access");
+            if (notif != null) {
+                notif.setOnPreferenceClickListener(p -> {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+                    } catch (Exception e) {
+                        startActivity(new Intent(Settings.ACTION_SETTINGS));
+                    }
+                    return true;
+                });
+            }
+            updateNotificationAccessSummary();
         }
 
         @Override
@@ -63,8 +76,20 @@ public class TinyDisplaySettingsActivity extends AppCompatActivity {
         @Override
         public void onResume() {
             super.onResume();
+            updateNotificationAccessSummary();
             PreferenceManager.getDefaultSharedPreferences(requireContext())
                     .registerOnSharedPreferenceChangeListener(this);
+        }
+
+        private void updateNotificationAccessSummary() {
+            Preference notif = findPreference("notification_access");
+            if (notif == null) return;
+            String flat = Settings.Secure.getString(requireContext().getContentResolver(),
+                    "enabled_notification_listeners");
+            boolean granted = flat != null && flat.contains(requireContext().getPackageName());
+            notif.setSummary(granted
+                    ? R.string.dash_notif_access_granted
+                    : R.string.dash_notif_access_needed);
         }
 
         @Override
