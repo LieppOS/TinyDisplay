@@ -377,7 +377,9 @@ public class TinyDisplayService extends Service {
             if (!subScreenPowered) { pocketCovered = false; powerOnSubScreen(); setPage(PAGE_CLOCK); return; }
             if (aodActive) { exitAod(); return; }
             if (horizontal) {
-                if (dx > 0) nextPage(); else prevPage();
+                // Physical swipe left (dx < 0) advances to the next page;
+                // physical swipe right returns to the previous page.
+                if (dx < 0) nextPage(); else prevPage();
             } else if (vertical) {
                 // Camera page is special: any clear vertical swipe exits to the
                 // clock. Otherwise a swipe-up runs the generic "dismiss" action
@@ -704,7 +706,7 @@ public class TinyDisplayService extends Service {
                 }
             }, PhoneStateListener.LISTEN_CALL_STATE);
         } catch (SecurityException e) {
-            Log.w(TAG, "No READ_PHONE_STATE permission — call detection disabled", e);
+            Log.w(TAG, "No READ_PHONE_STATE permission — incoming-call detection disabled");
         }
     }
 
