@@ -341,7 +341,7 @@ public class TinyDisplayService extends Service {
         if (!subScreenPowered) {
             pocketCovered = false;
             powerOnSubScreen();
-            setPage(PAGE_CLOCK);
+            showClockAfterWake();
             return;
         }
         if (aodActive) { exitAod(); return; }
@@ -383,7 +383,7 @@ public class TinyDisplayService extends Service {
             boolean vertical = !horizontal && ady >= 40;
             Log.i(TAG, "Rear swipe dx=" + dx + " dy=" + dy + " horizontal=" + horizontal
                     + " page=" + pageName(currentPage));
-            if (!subScreenPowered) { pocketCovered = false; powerOnSubScreen(); setPage(PAGE_CLOCK); return; }
+            if (!subScreenPowered) { pocketCovered = false; powerOnSubScreen(); showClockAfterWake(); return; }
             if (aodActive) { exitAod(); return; }
             if (horizontal) {
                 if (currentPage == PAGE_CLOCK) {
@@ -414,7 +414,7 @@ public class TinyDisplayService extends Service {
         switch (action) {
             case "toggle_power":
                 if (subScreenPowered) powerOffSubScreen();
-                else { powerOnSubScreen(); setPage(PAGE_CLOCK); }
+                else { powerOnSubScreen(); showClockAfterWake(); }
                 break;
             case "aod":
                 if (aodActive) exitAod(); else enterAod();
@@ -427,6 +427,16 @@ public class TinyDisplayService extends Service {
             case "dismiss": dismissCurrentNotification(); break;
             case "none": default: break;
         }
+    }
+
+    private void showClockAfterWake() {
+        currentPage = PAGE_CLOCK;
+        glanceActive = false;
+        aodActive = false;
+        renderHandler.removeMessages(MSG_NOTIF_END);
+        renderHandler.removeMessages(MSG_RENDER_AOD);
+        scheduleClockUpdate(0);
+        Log.i(TAG, "Wake -> clock render");
     }
 
     private void dismissCurrentNotification() {
