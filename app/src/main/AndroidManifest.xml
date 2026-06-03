@@ -58,7 +58,7 @@
         <service
             android:name=".TinyDisplayService"
             android:exported="true"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse|camera" />
 
         <service
             android:name=".NotificationListener"

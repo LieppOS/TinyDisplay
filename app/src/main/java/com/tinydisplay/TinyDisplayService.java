@@ -202,15 +202,17 @@ public class TinyDisplayService extends Service {
     private void powerOffSubScreen() {
         if (!ensureHalReady()) return;
         stopCameraModeLocked();
+        renderHandler.removeMessages(MSG_RENDER_CLOCK);
+        renderHandler.removeMessages(MSG_RENDER_AOD);
+        // Soft-off: keep controller/touch powered so rear double-tap can wake it.
+        // Full hal.setPower(0)/setBlEnable(0) can also kill the rear digitizer on
+        // this device, making wake-by-touch impossible.
+        pushFrame(new byte[TinyLcdHal.FRAME_SIZE]);
         hal.setBacklight(0);
-        hal.setBlEnable(0);
-        hal.setPower(0);
         lastFrameSize = -1;
         subScreenPowered = false;
         aodActive = false;
-        renderHandler.removeMessages(MSG_RENDER_CLOCK);
-        renderHandler.removeMessages(MSG_RENDER_AOD);
-        Log.i(TAG, "Sub-screen powered off");
+        Log.i(TAG, "Sub-screen soft-off (touch wake kept alive)");
     }
 
     private boolean isMainScreenInteractive() {
@@ -844,13 +846,9 @@ public class TinyDisplayService extends Service {
         Notification notification = buildForegroundNotification();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Do NOT request FOREGROUND_SERVICE_TYPE_CAMERA here. Android 14+
-                // rejects camera FGS type when camera mode is entered from rear
-                // touch/background service state, killing the renderer thread.
-                // Keep this service as specialUse only; CameraStreamer handles
-                // camera permission/errors separately.
-                startForeground(NOTIFICATION_ID, notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+                int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+                if (camera) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
+                startForeground(NOTIFICATION_ID, notification, type);
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
