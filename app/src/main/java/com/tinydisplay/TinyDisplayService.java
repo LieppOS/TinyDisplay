@@ -484,9 +484,21 @@ public class TinyDisplayService extends Service {
 
     // ── Frame push ───────────────────────────────────────────────────
 
+    /** Live mirror hook so the dashboard can show the rear-screen output. */
+    public interface FrameListener { void onFrame(byte[] frame); }
+    private static volatile FrameListener frameListener;
+    public static void setFrameListener(FrameListener l) {
+        frameListener = l;
+        TinyDisplayService s = instance;
+        if (l != null && s != null && s.lastFrame != null) l.onFrame(s.lastFrame);
+    }
+
     private void pushFrame(byte[] frame) {
-        if (!halReady || frame == null) return;
+        if (frame == null) return;
         lastFrame = frame;
+        FrameListener l = frameListener;
+        if (l != null) { try { l.onFrame(frame); } catch (Throwable ignored) {} }
+        if (!halReady) return;
         for (int i = 0; i < 5; i++) {
             int status = hal.getStatus();
             if (status < 2) break;

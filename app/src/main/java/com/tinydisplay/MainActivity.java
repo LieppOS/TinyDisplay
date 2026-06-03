@@ -25,6 +25,7 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView notifStatus;
     private MaterialButton notifButton;
+    private SubScreenMirrorView mirror;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
             getSupportActionBar().setTitle(R.string.app_name);
         }
 
+        mirror = findViewById(R.id.mirror);
         notifStatus = findViewById(R.id.notif_status);
         notifButton = findViewById(R.id.notif_button);
         notifButton.setOnClickListener(v -> openNotificationAccess());
@@ -57,6 +59,19 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshNotificationAccess();
+        TinyDisplayService.setFrameListener(frame -> {
+            if (mirror != null) mirror.update(frame);
+        });
+        // Ensure the renderer service is alive so the mirror has a live source.
+        Intent svc = new Intent(this, TinyDisplayService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc);
+        else startService(svc);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        TinyDisplayService.setFrameListener(null);
     }
 
     private void refreshNotificationAccess() {

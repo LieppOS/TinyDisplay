@@ -126,6 +126,25 @@ public class RawFontRenderer {
         return ((H - 1 - y) * W + (W - 1 - x)) * 2;
     }
 
+    /**
+     * Decode a panel frame back into an upright ARGB pixel array (W*H), so the
+     * dashboard can mirror exactly what the rear screen shows. Reverses both the
+     * RGB565 packing and the 180-degree panel mapping used by {@link #idx}.
+     */
+    public static void decodeToArgb(byte[] frame, int[] out) {
+        if (frame == null || out == null || out.length < W * H) return;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                int i = idx(x, y);
+                int rgb565 = ((frame[i] & 0xFF) << 8) | (frame[i + 1] & 0xFF);
+                int r = ((rgb565 >> 11) & 0x1F) << 3;
+                int g = ((rgb565 >> 5) & 0x3F) << 2;
+                int b = (rgb565 & 0x1F) << 3;
+                out[y * W + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+        }
+    }
+
     /** Set a single pixel in the frame (RGB565 big-endian). */
     public static void setPixel(byte[] frame, int x, int y, int rgb565) {
         if (x < 0 || x >= W || y < 0 || y >= H) return;

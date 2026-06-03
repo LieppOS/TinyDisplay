@@ -19,6 +19,37 @@
             app:title="@string/app_name" />
     </com.google.android.material.appbar.AppBarLayout>
 
+    <!-- Live mirror of the rear sub-screen output -->
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.TinyDisplay.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <com.tinydisplay.SubScreenMirrorView
+                android:id="@+id/mirror"
+                android:layout_width="190dp"
+                android:layout_height="190dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:alpha="0.7"
+                android:text="@string/dash_mirror_hint"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
     <!-- Settings list fills the screen -->
     <FrameLayout
         android:id="@+id/settings_container"
