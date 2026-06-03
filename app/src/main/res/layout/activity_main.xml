@@ -67,24 +67,12 @@
         android:paddingTop="8dp"
         android:paddingBottom="16dp">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/preview_button"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="12dp"
-            app:icon="@drawable/ic_eye"
-            app:iconGravity="textStart"
-            app:iconTint="?attr/colorOnPrimary"
-            android:text="@string/dash_preview" />
-
-        <!-- Notification access (moved to the bottom) -->
+        <!-- Notification access (always shown at the bottom) -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/notif_card"
             style="@style/Widget.TinyDisplay.Card"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp">
+            android:layout_height="wrap_content">
 
             <LinearLayout
                 android:layout_width="match_parent"

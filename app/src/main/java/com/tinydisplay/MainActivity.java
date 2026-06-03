@@ -43,8 +43,6 @@ public class MainActivity extends AppCompatActivity {
         notifStatus = findViewById(R.id.notif_status);
         notifButton = findViewById(R.id.notif_button);
         notifButton.setOnClickListener(v -> openNotificationAccess());
-
-        findViewById(R.id.preview_button).setOnClickListener(v -> previewOnSubScreen());
         requestCameraPermissionIfNeeded();
 
         if (savedInstanceState == null) {
@@ -76,13 +74,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void refreshNotificationAccess() {
         boolean granted = isNotificationAccessGranted();
-        if (granted) {
-            notifStatus.setText(R.string.dash_notif_access_granted);
-            notifButton.setVisibility(MaterialButton.GONE);
-        } else {
-            notifStatus.setText(R.string.dash_notif_access_needed);
-            notifButton.setVisibility(MaterialButton.VISIBLE);
-        }
+        notifStatus.setText(granted
+                ? R.string.dash_notif_access_granted
+                : R.string.dash_notif_access_needed);
+        // Permissions row stays visible at all times; the button just opens the
+        // system notification-access screen.
+        notifButton.setText(granted ? R.string.dash_manage_access : R.string.dash_grant_access);
     }
 
     private boolean isNotificationAccessGranted() {
@@ -106,14 +103,4 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** Power on the sub-screen and show the clock briefly, regardless of config. */
-    private void previewOnSubScreen() {
-        Intent svc = new Intent(this, TinyDisplayService.class);
-        svc.setAction(TinyDisplayService.ACTION_PREVIEW);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(svc);
-        } else {
-            startService(svc);
-        }
-    }
 }
