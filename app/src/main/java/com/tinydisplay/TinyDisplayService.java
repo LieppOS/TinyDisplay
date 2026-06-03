@@ -451,8 +451,20 @@ public class TinyDisplayService extends Service {
         renderHandler.removeMessages(MSG_RENDER_CLOCK);
         renderHandler.removeMessages(MSG_NOTIF_END);
         if (cameraMode) return;
+
+        // Android 14+ forbids adding FOREGROUND_SERVICE_TYPE_CAMERA while the
+        // app is only being driven by a background service/rear-touch command.
+        // Never let that policy kill the whole renderer: fail back to clock and
+        // tell the user to open the app/grant camera permission first.
         cameraMode = true;
-        updateForegroundType(true);
+        if (!updateForegroundType(true)) {
+            cameraMode = false;
+            currentPage = PAGE_CLOCK;
+            pushFrame(RawFontRenderer.renderText("OPEN APP", 4));
+            scheduleClockUpdate(3_000);
+            return;
+        }
+
         pushFrame(RawFontRenderer.renderText("CAMERA", 6));
         cameraStreamer = new CameraStreamer(this, new CameraStreamer.FrameSink() {
             @Override public void onFrame(byte[] frame) {
@@ -463,8 +475,18 @@ public class TinyDisplayService extends Service {
                 renderHandler.post(() -> { if (cameraMode) pushFrame(RawFontRenderer.renderText("CAMERA ERR", 4)); });
             }
         });
-        cameraStreamer.start();
-        Log.i(TAG, "Camera mode started");
+        try {
+            cameraStreamer.start();
+            Log.i(TAG, "Camera mode started");
+        } catch (SecurityException e) {
+            Log.w(TAG, "Camera start blocked by Android foreground-camera policy", e);
+            if (cameraStreamer != null) { cameraStreamer.stop(); cameraStreamer = null; }
+            cameraMode = false;
+            updateForegroundType(false);
+            currentPage = PAGE_CLOCK;
+            pushFrame(RawFontRenderer.renderText("CAMERA BLOCK", 3));
+            scheduleClockUpdate(3_000);
+        }
     }
 
     private void stopCameraModeLocked() {
@@ -704,14 +726,27 @@ public class TinyDisplayService extends Service {
                 .build();
     }
 
-    private void updateForegroundType(boolean camera) {
+    private boolean updateForegroundType(boolean camera) {
         Notification notification = buildForegroundNotification();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
-            if (camera) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-            startForeground(NOTIFICATION_ID, notification, type);
-        } else {
-            startForeground(NOTIFICATION_ID, notification);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+                if (camera) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
+                startForeground(NOTIFICATION_ID, notification, type);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+            return true;
+        } catch (SecurityException | IllegalArgumentException e) {
+            Log.w(TAG, "Foreground service type update denied (camera=" + camera + ")", e);
+            if (camera) {
+                try {
+                    startForeground(NOTIFICATION_ID, notification,
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                                    ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0);
+                } catch (Exception ignored) {}
+            }
+            return false;
         }
     }
 
