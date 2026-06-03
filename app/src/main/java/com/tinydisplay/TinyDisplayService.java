@@ -379,7 +379,11 @@ public class TinyDisplayService extends Service {
             if (horizontal) {
                 if (dx > 0) nextPage(); else prevPage();
             } else if (vertical) {
-                if (dy < 0) runAction(prefs.getString("gesture_swipe_up", "dismiss"));
+                // Camera page is special: any clear vertical swipe exits to the
+                // clock. Otherwise a swipe-up runs the generic "dismiss" action
+                // and appears to do nothing, leaving users stuck in camera.
+                if (currentPage == PAGE_CAMERA) setPage(PAGE_CLOCK);
+                else if (dy < 0) runAction(prefs.getString("gesture_swipe_up", "dismiss"));
                 else runAction(prefs.getString("gesture_swipe_down", "none"));
             } else {
                 Log.i(TAG, "Rear swipe ignored: too short/ambiguous");
