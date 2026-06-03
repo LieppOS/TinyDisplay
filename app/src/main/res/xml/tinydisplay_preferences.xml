@@ -99,6 +99,14 @@
             android:dependency="sub_screen_enabled"
             app:iconSpaceReserved="false" />
 
+        <SwitchPreferenceCompat
+            android:key="f2_photo_enabled"
+            android:title="@string/pref_f2_photo"
+            android:summary="@string/pref_f2_photo_summary"
+            android:defaultValue="true"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

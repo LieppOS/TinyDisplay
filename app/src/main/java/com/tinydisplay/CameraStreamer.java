@@ -13,9 +13,11 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.media.Image;
 import android.media.ImageReader;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
+import android.util.Size;
 import android.view.Surface;
 
 import java.nio.ByteBuffer;
@@ -29,8 +31,8 @@ final class CameraStreamer {
     }
 
     private static final String TAG = "TinyDisplayCamera";
-    private static final int SRC_W = 320;
-    private static final int SRC_H = 240;
+    private static final int DEFAULT_SRC_W = 640;
+    private static final int DEFAULT_SRC_H = 480;
     private static final int FRAME_SKIP_MS = 120; // ~8 fps; enough for the tiny display/HAL
 
     private final Context context;
@@ -40,6 +42,7 @@ final class CameraStreamer {
     private ImageReader reader;
     private CameraDevice camera;
     private CameraCaptureSession session;
+    private CameraCharacteristics currentCharacteristics;
     private int sensorOrientation = 90;
     private long lastFrameMs;
     private volatile boolean frozen = false;
@@ -56,12 +59,20 @@ final class CameraStreamer {
         Log.i(TAG, "freeze=" + frozen);
     }
 
-    /** Switch between back and front camera (double-tap). */
+    /** Switch between back and front camera. */
     void flipCamera() {
         facing = (facing == CameraCharacteristics.LENS_FACING_BACK)
                 ? CameraCharacteristics.LENS_FACING_FRONT
                 : CameraCharacteristics.LENS_FACING_BACK;
         Log.i(TAG, "flip facing=" + facing);
+        if (handler != null) handler.post(this::restart);
+    }
+
+    /** Force front/selfie camera. */
+    void useFrontCamera() {
+        if (facing == CameraCharacteristics.LENS_FACING_FRONT) return;
+        facing = CameraCharacteristics.LENS_FACING_FRONT;
+        Log.i(TAG, "front camera selected");
         if (handler != null) handler.post(this::restart);
     }
 
@@ -84,8 +95,6 @@ final class CameraStreamer {
         thread = new HandlerThread("tinydisplay_camera");
         thread.start();
         handler = new Handler(thread.getLooper());
-        reader = ImageReader.newInstance(SRC_W, SRC_H, ImageFormat.YUV_420_888, 2);
-        reader.setOnImageAvailableListener(this::onImageAvailable, handler);
         openSelected();
     }
 
@@ -96,8 +105,14 @@ final class CameraStreamer {
             String id = chooseCamera(cm, facing);
             if (id == null) throw new CameraAccessException(CameraAccessException.CAMERA_ERROR, "No camera");
             CameraCharacteristics c = cm.getCameraCharacteristics(id);
+            currentCharacteristics = c;
             Integer o = c.get(CameraCharacteristics.SENSOR_ORIENTATION);
             if (o != null) sensorOrientation = o;
+            Size size = chooseYuvSize(c);
+            try { if (reader != null) reader.close(); } catch (Exception ignored) {}
+            reader = ImageReader.newInstance(size.getWidth(), size.getHeight(), ImageFormat.YUV_420_888, 2);
+            reader.setOnImageAvailableListener(this::onImageAvailable, handler);
+            Log.i(TAG, "open camera id=" + id + " facing=" + facing + " size=" + size);
             cm.openCamera(id, new CameraDevice.StateCallback() {
                 @Override public void onOpened(CameraDevice device) {
                     camera = device;
@@ -125,6 +140,7 @@ final class CameraStreamer {
         try { if (reader != null) reader.close(); } catch (Exception ignored) {}
         session = null;
         camera = null;
+        currentCharacteristics = null;
         reader = null;
         if (thread != null) {
             thread.quitSafely();
@@ -144,6 +160,23 @@ final class CameraStreamer {
         return fallback;
     }
 
+    private Size chooseYuvSize(CameraCharacteristics c) {
+        StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        Size[] sizes = map != null ? map.getOutputSizes(ImageFormat.YUV_420_888) : null;
+        if (sizes == null || sizes.length == 0) return new Size(DEFAULT_SRC_W, DEFAULT_SRC_H);
+        Size best = sizes[0];
+        long bestScore = Long.MAX_VALUE;
+        for (Size s : sizes) {
+            int w = s.getWidth(), h = s.getHeight();
+            long pixels = (long) w * h;
+            long score;
+            if (w >= 320 && h >= 240) score = pixels;
+            else score = 10_000_000L + pixels;
+            if (score < bestScore) { best = s; bestScore = score; }
+        }
+        return best;
+    }
+
     private void createSession() {
         try {
             Surface surface = reader.getSurface();
@@ -153,9 +186,6 @@ final class CameraStreamer {
                     try {
                         CaptureRequest.Builder b = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                         b.addTarget(surface);
-                        b.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-                        b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                        b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
                         session.setRepeatingRequest(b.build(), null, handler);
                     } catch (Throwable t) {
                         sink.onError("Camera preview failed", t);
@@ -168,6 +198,14 @@ final class CameraStreamer {
         } catch (Throwable t) {
             sink.onError("Camera session start failed", t);
         }
+    }
+
+    private boolean supports(CameraCharacteristics c, CameraCharacteristics.Key<int[]> key, int value) {
+        if (c == null) return false;
+        int[] modes = c.get(key);
+        if (modes == null) return false;
+        for (int m : modes) if (m == value) return true;
+        return false;
     }
 
     private void onImageAvailable(ImageReader r) {

@@ -38,6 +38,8 @@
     <string name="pref_aod_summary">Show a dim clock instead of turning the sub-screen fully off</string>
     <string name="pref_pocket">Pocket / cover detection</string>
     <string name="pref_pocket_summary">Turn the sub-screen off when the proximity sensor is covered</string>
+    <string name="pref_f2_photo">F2 selfie photo</string>
+    <string name="pref_f2_photo_summary">When the hardware F2 button is pressed, open the front camera and save a TinyDisplay photo</string>
 
     <!-- Gestures -->
     <string name="pref_cat_gestures">Rear-touch gestures</string>
@@ -45,7 +47,7 @@
     <string name="pref_gesture_long_press">Long press</string>
     <string name="pref_gesture_swipe_up">Swipe up</string>
     <string name="pref_gesture_swipe_down">Swipe down</string>
-    <string name="pref_gesture_hint">Swipe left/right always switches pages (clock, notifications, camera). In camera: double tap flips camera, long press freezes.</string>
+    <string name="pref_gesture_hint">Clock is the center. Swipe left for notifications, right for camera. Notifications use up/down to scroll. Double tap toggles power.</string>
 
     <!-- Dashboard -->
     <string name="dash_subtitle">Rear 1.04\" sub-screen control</string>
