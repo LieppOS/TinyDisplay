@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="@string/pref_cat_display"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreferenceCompat
+            android:key="sub_screen_enabled"
+            android:title="@string/pref_enabled"
+            android:summary="@string/pref_enabled_summary"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="brightness"
+            android:title="@string/pref_brightness"
+            android:entries="@array/brightness_entries"
+            android:entryValues="@array/brightness_values"
+            android:defaultValue="200"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/pref_cat_content"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreferenceCompat
+            android:key="show_clock"
+            android:title="@string/pref_show_clock"
+            android:summary="@string/pref_show_clock_summary"
+            android:defaultValue="true"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="clock_face"
+            android:title="@string/pref_clock_face"
+            android:entries="@array/clock_face_entries"
+            android:entryValues="@array/clock_face_values"
+            android:defaultValue="0"
+            android:dependency="sub_screen_enabled"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="show_notifications"
+            android:title="@string/pref_show_notifs"
+            android:summary="@string/pref_show_notifs_summary"
+            android:defaultValue="true"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="show_incoming_calls"
+            android:title="@string/pref_show_calls"
+            android:summary="@string/pref_show_calls_summary"
+            android:defaultValue="true"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/pref_cat_behavior"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreferenceCompat
+            android:key="background_service_enabled"
+            android:title="@string/pref_background_service"
+            android:summary="@string/pref_background_service_summary"
+            android:defaultValue="true"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="auto_off_with_screen"
+            android:title="@string/pref_auto_off"
+            android:summary="@string/pref_auto_off_summary"
+            android:defaultValue="true"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="aod_enabled"
+            android:title="@string/pref_aod"
+            android:summary="@string/pref_aod_summary"
+            android:defaultValue="false"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
+        <SwitchPreferenceCompat
+            android:key="pocket_mode"
+            android:title="@string/pref_pocket"
+            android:summary="@string/pref_pocket_summary"
+            android:defaultValue="false"
+            android:dependency="sub_screen_enabled"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/pref_cat_gestures"
+        android:summary="@string/pref_gesture_hint"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:key="gesture_double_tap"
+            android:title="@string/pref_gesture_double_tap"
+            android:entries="@array/gesture_entries"
+            android:entryValues="@array/gesture_values"
+            android:defaultValue="toggle_power"
+            android:dependency="sub_screen_enabled"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="gesture_long_press"
+            android:title="@string/pref_gesture_long_press"
+            android:entries="@array/gesture_entries"
+            android:entryValues="@array/gesture_values"
+            android:defaultValue="aod"
+            android:dependency="sub_screen_enabled"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="gesture_swipe_up"
+            android:title="@string/pref_gesture_swipe_up"
+            android:entries="@array/gesture_entries"
+            android:entryValues="@array/gesture_values"
+            android:defaultValue="dismiss"
+            android:dependency="sub_screen_enabled"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="gesture_swipe_down"
+            android:title="@string/pref_gesture_swipe_down"
+            android:entries="@array/gesture_entries"
+            android:entryValues="@array/gesture_values"
+            android:defaultValue="none"
+            android:dependency="sub_screen_enabled"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/pref_cat_notifications"
+        app:iconSpaceReserved="false">
+
+        <SwitchPreferenceCompat
+            android:key="wake_on_notification"
+            android:title="@string/pref_wake_on_notif"
+            android:summary="@string/pref_wake_on_notif_summary"
+            android:defaultValue="true"
+            android:dependency="show_notifications"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

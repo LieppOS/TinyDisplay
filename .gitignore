@@ -1,0 +1,18 @@
+# Local documentation / notes
+DOCS/
+
+# Build output
+build/
+app/build/
+touchhelper/build/
+.gradle/
+**/.cxx/
+
+# IDE / local config
+.idea/
+local.properties
+*.iml
+
+# Tooling cruft
+.codex
+.claude/

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="brightness_entries">
+        <item>Low</item>
+        <item>Medium</item>
+        <item>High</item>
+        <item>Maximum</item>
+    </string-array>
+    <string-array name="brightness_values">
+        <item>50</item>
+        <item>100</item>
+        <item>200</item>
+        <item>255</item>
+    </string-array>
+
+    <string-array name="clock_face_entries">
+        <item>Digital</item>
+        <item>Analog</item>
+        <item>Battery ring</item>
+    </string-array>
+    <string-array name="clock_face_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array>
+
+    <string-array name="gesture_entries">
+        <item>Nothing</item>
+        <item>Toggle power</item>
+        <item>Always-on display</item>
+        <item>Open camera</item>
+        <item>Show clock</item>
+        <item>Show notifications</item>
+        <item>Next page</item>
+        <item>Previous page</item>
+        <item>Dismiss notification</item>
+    </string-array>
+    <string-array name="gesture_values">
+        <item>none</item>
+        <item>toggle_power</item>
+        <item>aod</item>
+        <item>camera</item>
+        <item>clock</item>
+        <item>notifications</item>
+        <item>next_page</item>
+        <item>prev_page</item>
+        <item>dismiss</item>
+    </string-array>
+</resources>

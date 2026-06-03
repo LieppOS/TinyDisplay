@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette -->
+    <color name="settings_accent">#2563EB</color>
+    <color name="ts_primary">#2563EB</color>
+    <color name="ts_on_primary">#FFFFFF</color>
+    <color name="ts_primary_container">#DBE5FF</color>
+    <color name="ts_on_primary_container">#001A41</color>
+
+    <color name="ts_hero_start">#2563EB</color>
+    <color name="ts_hero_end">#7C3AED</color>
+
+    <color name="ts_success">#1E8E3E</color>
+
+    <color name="settings_surface_light">#FFFDFC</color>
+    <color name="settings_surface_dark">#121212</color>
+</resources>

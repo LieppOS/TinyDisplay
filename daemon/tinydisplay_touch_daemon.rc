@@ -1,0 +1,9 @@
+service tinydisplay_touch_daemon /system_ext/bin/tinydisplay_touch_daemon
+    class late_start
+    user system
+    group input log
+    seclabel u:r:tinydisplay_touch_daemon:s0
+    disabled
+
+on property:sys.boot_completed=1
+    start tinydisplay_touch_daemon

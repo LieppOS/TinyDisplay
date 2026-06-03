@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TinyDisplay" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/ts_primary</item>
+        <item name="colorOnPrimary">@color/ts_on_primary</item>
+        <item name="colorPrimaryContainer">@color/ts_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/ts_on_primary_container</item>
+        <item name="colorSecondary">@color/ts_primary</item>
+
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+        <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="toolbarStyle">@style/Widget.TinyDisplay.Toolbar</item>
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay</item>
+    </style>
+
+    <style name="Widget.TinyDisplay.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">?attr/colorSurface</item>
+        <item name="titleTextColor">?attr/colorOnSurface</item>
+        <item name="titleTextAppearance">@style/TextAppearance.Material3.TitleLarge</item>
+        <item name="subtitleTextColor">?attr/colorOnSurfaceVariant</item>
+        <item name="navigationIconTint">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="PreferenceThemeOverlay" parent="@style/PreferenceThemeOverlay">
+        <item name="android:colorAccent">@color/ts_primary</item>
+        <item name="colorAccent">@color/ts_primary</item>
+    </style>
+
+    <style name="Widget.TinyDisplay.Card" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardCornerRadius">20dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="strokeColor">?attr/colorOutlineVariant</item>
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainerLow</item>
+    </style>
+</resources>

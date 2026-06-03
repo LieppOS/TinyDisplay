@@ -1,0 +1,3 @@
+rootProject.name = 'TinyDisplay'
+include ':app'
+include ':touchhelper'
