@@ -277,8 +277,12 @@ public class TinyDisplayService extends Service {
 
     private void setPage(int page) {
         page = Math.max(PAGE_CLOCK, Math.min(PAGE_MAX, page));
-        if (page == currentPage && page != PAGE_NOTIFICATIONS) return;
+        if (page == currentPage && page != PAGE_NOTIFICATIONS) {
+            Log.i(TAG, "Page unchanged: " + pageName(page));
+            return;
+        }
         int old = currentPage;
+        Log.i(TAG, "Page " + pageName(old) + " -> " + pageName(page));
         if (old == PAGE_CAMERA && page != PAGE_CAMERA) stopCameraModeLocked();
         currentPage = page;
         glanceActive = false;
@@ -291,8 +295,17 @@ public class TinyDisplayService extends Service {
         }
     }
 
-    private void nextPage() { setPage(currentPage + 1); }
-    private void prevPage() { setPage(currentPage - 1); }
+    private String pageName(int page) {
+        switch (page) {
+            case PAGE_NOTIFICATIONS: return "notifications";
+            case PAGE_CAMERA: return "camera";
+            case PAGE_CLOCK:
+            default: return "clock";
+        }
+    }
+
+    private void nextPage() { setPage(currentPage >= PAGE_MAX ? PAGE_CLOCK : currentPage + 1); }
+    private void prevPage() { setPage(currentPage <= PAGE_CLOCK ? PAGE_MAX : currentPage - 1); }
 
     // ── Gesture handling ─────────────────────────────────────────────
 
@@ -354,14 +367,22 @@ public class TinyDisplayService extends Service {
     private void handleRearSwipe(int sx, int sy, int ex, int ey) {
         renderHandler.post(() -> {
             int dx = ex - sx, dy = ey - sy;
-            boolean horizontal = Math.abs(dx) >= Math.abs(dy);
+            int adx = Math.abs(dx), ady = Math.abs(dy);
+            // On the 340px round panel human swipes are often diagonal. Prefer
+            // left/right page navigation unless the drag is clearly vertical.
+            boolean horizontal = adx >= 40 && adx * 100 >= ady * 55;
+            boolean vertical = !horizontal && ady >= 40;
+            Log.i(TAG, "Rear swipe dx=" + dx + " dy=" + dy + " horizontal=" + horizontal
+                    + " page=" + pageName(currentPage));
             if (!subScreenPowered) { pocketCovered = false; powerOnSubScreen(); setPage(PAGE_CLOCK); return; }
             if (aodActive) { exitAod(); return; }
             if (horizontal) {
                 if (dx > 0) nextPage(); else prevPage();
-            } else {
+            } else if (vertical) {
                 if (dy < 0) runAction(prefs.getString("gesture_swipe_up", "dismiss"));
                 else runAction(prefs.getString("gesture_swipe_down", "none"));
+            } else {
+                Log.i(TAG, "Rear swipe ignored: too short/ambiguous");
             }
         });
     }
