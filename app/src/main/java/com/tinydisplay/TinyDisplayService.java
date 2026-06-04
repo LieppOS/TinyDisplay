@@ -147,6 +147,9 @@ public class TinyDisplayService extends Service {
     private byte[] dragBaseFrame, dragIncomingFrame;
     private long lastDragRenderMs = 0;
     private int dragLastX = 0;
+    private int lastReturnedFromSide = -1;
+    private long lastSideReturnMs = 0;
+    private static final long SIDE_RETURN_ASSIST_MS = 1800;
     private static final long DRAG_TIMEOUT_MS = 400; // auto-resolve if finger-up is lost
     private final Runnable dragWatchdog = this::finalizeDragTimeout;
 
@@ -334,6 +337,12 @@ public class TinyDisplayService extends Service {
         int old = currentPage;
         Log.i(TAG, "Page " + pageName(old) + " -> " + pageName(page));
         if (old == PAGE_CAMERA && page != PAGE_CAMERA) stopCameraModeLocked();
+        if (page == PAGE_CLOCK && (old == PAGE_CAMERA || old == PAGE_NOTIFICATIONS)) {
+            lastReturnedFromSide = old;
+            lastSideReturnMs = SystemClock.uptimeMillis();
+        } else if (page != PAGE_CLOCK) {
+            lastReturnedFromSide = -1;
+        }
         currentPage = page;
         glanceActive = false;
         renderHandler.removeMessages(MSG_NOTIF_END);
@@ -440,12 +449,12 @@ public class TinyDisplayService extends Service {
             if (aodActive) { exitAod(); return; }
             if (horizontal) {
                 if (currentPage == PAGE_CLOCK) {
-                    if (dx < 0) setPage(PAGE_NOTIFICATIONS); // right-to-left
-                    else setPage(PAGE_CAMERA);               // left-to-right
-                } else if (currentPage == PAGE_NOTIFICATIONS) {
-                    if (dx > 0) setPage(PAGE_CLOCK);         // left-to-right back
-                } else if (currentPage == PAGE_CAMERA) {
-                    if (dx < 0) setPage(PAGE_CLOCK);         // right-to-left back
+                    int assisted = assistedClockTarget();
+                    if (assisted >= 0) setPage(assisted);
+                    else if (dx < 0) setPage(PAGE_NOTIFICATIONS); // right-to-left
+                    else setPage(PAGE_CAMERA);                    // left-to-right
+                } else if (currentPage == PAGE_NOTIFICATIONS || currentPage == PAGE_CAMERA) {
+                    setPage(PAGE_CLOCK);                          // any horizontal exits side page
                 }
             } else if (vertical) {
                 if (currentPage == PAGE_NOTIFICATIONS) {
@@ -459,6 +468,18 @@ public class TinyDisplayService extends Service {
                 Log.i(TAG, "Rear swipe ignored: too short/ambiguous");
             }
         });
+    }
+
+    private int assistedClockTarget() {
+        if (lastReturnedFromSide < 0) return -1;
+        if (SystemClock.uptimeMillis() - lastSideReturnMs > SIDE_RETURN_ASSIST_MS) {
+            lastReturnedFromSide = -1;
+            return -1;
+        }
+        int target = lastReturnedFromSide == PAGE_CAMERA ? PAGE_NOTIFICATIONS : PAGE_CAMERA;
+        Log.i(TAG, "Side-return assist: " + pageName(lastReturnedFromSide) + " -> clock -> " + pageName(target));
+        lastReturnedFromSide = -1;
+        return target;
     }
 
     /** Resolve a configurable gesture action string. */
@@ -640,9 +661,15 @@ public class TinyDisplayService extends Service {
 
     private int neighborForDrag(int dx) {
         switch (currentPage) {
-            case PAGE_CLOCK:         return dx < 0 ? PAGE_NOTIFICATIONS : PAGE_CAMERA;
-            case PAGE_NOTIFICATIONS: return dx > 0 ? PAGE_CLOCK : -1;
-            default:                 return -1;
+            case PAGE_CLOCK:
+                int assisted = assistedClockTarget();
+                if (assisted >= 0) return assisted;
+                return dx < 0 ? PAGE_NOTIFICATIONS : PAGE_CAMERA;
+            case PAGE_NOTIFICATIONS:
+            case PAGE_CAMERA:
+                return PAGE_CLOCK;
+            default:
+                return -1;
         }
     }
 
