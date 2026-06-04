@@ -118,6 +118,12 @@ binder_call(tinydisplay_touch_daemon, system_server)
 binder_call(system_server, tinydisplay_touch_daemon)
 # Keep the app helper allowance too; harmless if it remains blocked by app sandboxing.
 allow system_app input_device:chr_file r_file_perms;
+# Live drag: the daemon streams raw touch coordinates to the app over an
+# abstract UNIX socket so the next page can follow the finger. It must be able
+# to create its own client socket and connect to the app's listening socket.
+allow tinydisplay_touch_daemon self:unix_stream_socket create_socket_perms;
+allow tinydisplay_touch_daemon platform_app:unix_stream_socket connectto;
+allow tinydisplay_touch_daemon system_app:unix_stream_socket connectto;
 EOF
     if ! grep -q 'tinydisplay_touch_daemon' "$LINEAGE_ROOT/vendor/lieppos/sepolicy/file_contexts"; then
         cat >> "$LINEAGE_ROOT/vendor/lieppos/sepolicy/file_contexts" << 'EOF'
