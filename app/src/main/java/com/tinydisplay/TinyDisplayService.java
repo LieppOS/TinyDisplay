@@ -339,8 +339,14 @@ public class TinyDisplayService extends Service {
         });
     }
 
+    /** Gestures may only wake the panel when the master switch is enabled. */
+    private boolean gestureWakeAllowed() {
+        return prefs.getBoolean("sub_screen_enabled", false);
+    }
+
     private void onSingleTap() {
         if (!subScreenPowered) {
+            if (!gestureWakeAllowed()) { Log.i(TAG, "Wake ignored: sub-screen disabled in settings"); return; }
             pocketCovered = false;
             powerOnSubScreen();
             showClockAfterWake();
@@ -385,7 +391,10 @@ public class TinyDisplayService extends Service {
             boolean vertical = !horizontal && ady >= 40;
             Log.i(TAG, "Rear swipe dx=" + dx + " dy=" + dy + " horizontal=" + horizontal
                     + " page=" + pageName(currentPage));
-            if (!subScreenPowered) { pocketCovered = false; powerOnSubScreen(); showClockAfterWake(); return; }
+            if (!subScreenPowered) {
+                if (!gestureWakeAllowed()) { Log.i(TAG, "Wake ignored: sub-screen disabled in settings"); return; }
+                pocketCovered = false; powerOnSubScreen(); showClockAfterWake(); return;
+            }
             if (aodActive) { exitAod(); return; }
             if (horizontal) {
                 if (currentPage == PAGE_CLOCK) {
@@ -416,7 +425,8 @@ public class TinyDisplayService extends Service {
         switch (action) {
             case "toggle_power":
                 if (subScreenPowered) powerOffSubScreen();
-                else { powerOnSubScreen(); showClockAfterWake(); }
+                else if (gestureWakeAllowed()) { powerOnSubScreen(); showClockAfterWake(); }
+                else Log.i(TAG, "Toggle-on ignored: sub-screen disabled in settings");
                 break;
             case "aod":
                 if (aodActive) exitAod(); else enterAod();
