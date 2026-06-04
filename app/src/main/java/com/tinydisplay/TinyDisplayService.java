@@ -146,6 +146,9 @@ public class TinyDisplayService extends Service {
     private boolean dragFromRight = false;
     private byte[] dragBaseFrame, dragIncomingFrame;
     private long lastDragRenderMs = 0;
+    private int dragLastX = 0;
+    private static final long DRAG_TIMEOUT_MS = 400; // auto-resolve if finger-up is lost
+    private final Runnable dragWatchdog = this::finalizeDragTimeout;
 
     private SharedPreferences prefs;
     private SensorManager sensorManager;
@@ -539,7 +542,8 @@ public class TinyDisplayService extends Service {
     }
 
     private void onTouchDown(int x, int y) {
-        dragStartX = x; dragStartY = y;
+        renderHandler.removeCallbacks(dragWatchdog);
+        dragStartX = x; dragStartY = y; dragLastX = x;
         dragDownTime = SystemClock.uptimeMillis();
         dragDecided = false;
         dragActive = false;
@@ -566,7 +570,11 @@ public class TinyDisplayService extends Service {
                 }
             }
         }
+        dragLastX = x;
         if (dragActive) {
+            // (re)arm the watchdog so a lost finger-up can't freeze a half frame
+            renderHandler.removeCallbacks(dragWatchdog);
+            renderHandler.postDelayed(dragWatchdog, DRAG_TIMEOUT_MS);
             long now = SystemClock.uptimeMillis();
             if (now - lastDragRenderMs < 16) return; // ~60fps cap
             lastDragRenderMs = now;
@@ -576,7 +584,18 @@ public class TinyDisplayService extends Service {
         }
     }
 
+    /** Resolve a drag whose finger-up event never arrived. */
+    private void finalizeDragTimeout() {
+        if (!dragActive) return;
+        int dx = dragLastX - dragStartX;
+        float prog = Math.min(1f, Math.abs(dx) / (float) RawFontRenderer.W);
+        dragActive = false;
+        if (prog >= DRAG_COMMIT) { Log.i(TAG, "Drag timeout commit -> " + pageName(dragNeighbor)); setPage(dragNeighbor); }
+        else { Log.i(TAG, "Drag timeout snap back"); snapBackCurrentPage(); }
+    }
+
     private void onTouchUp(int x, int y, long heldMs) {
+        renderHandler.removeCallbacks(dragWatchdog);
         if (dragActive) {
             int dx = x - dragStartX;
             float prog = Math.min(1f, Math.abs(dx) / (float) RawFontRenderer.W);
