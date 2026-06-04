@@ -16,9 +16,10 @@
 
 static const char* FALLBACK_TOUCH = "/dev/input/event5";
 
-// Gesture thresholds (panel is 340x340).
-static const int TAP_MAX_MOVE2 = 35 * 35;
-static const int SWIPE_MIN_MOVE2 = 55 * 55;
+// Gesture thresholds (panel is 340x340). Kept small because the panel is tiny;
+// anything past SWIPE_MIN is a swipe, everything else is a tap/long-press, so
+// there is no dead zone where short flicks get dropped.
+static const int SWIPE_MIN_MOVE2 = 28 * 28;
 static const long LONGPRESS_MS = 600;
 
 static int set_nonblock(int fd) {
@@ -115,38 +116,46 @@ static void classify(int sx, int sy, int ex, int ey, long heldMs) {
     int dx = ex - sx, dy = ey - sy;
     int d2 = dx * dx + dy * dy;
     if (d2 >= SWIPE_MIN_MOVE2) send_swipe(sx, sy, ex, ey);
-    else if (d2 <= TAP_MAX_MOVE2) {
-        if (heldMs >= LONGPRESS_MS) send_longpress(ex, ey);
-        else send_tap(ex, ey);
-    }
+    else if (heldMs >= LONGPRESS_MS) send_longpress(ex, ey);
+    else send_tap(ex, ey);
 }
 
 struct TouchState {
     int x = -1, y = -1, sx = -1, sy = -1;
     bool touching = false;
+    bool startPending = false;
     struct timeval downTime = {0, 0};
 };
 
+// Capture the swipe start as soon as we have valid coordinates after a down
+// event. Some drivers report TRACKING_ID/BTN_TOUCH before the first X/Y, which
+// used to leave the start point at -1 and silently drop the whole swipe.
+static void maybe_capture_start(TouchState& st, const struct input_event& ev) {
+    if (st.startPending && st.x >= 0 && st.y >= 0) {
+        st.sx = st.x; st.sy = st.y; st.downTime = ev.time; st.startPending = false;
+    }
+}
+
 static void handle_touch_event(TouchState& st, const struct input_event& ev) {
     if (ev.type == EV_ABS) {
-        if (ev.code == ABS_MT_POSITION_X || ev.code == ABS_X) st.x = ev.value;
-        else if (ev.code == ABS_MT_POSITION_Y || ev.code == ABS_Y) st.y = ev.value;
+        if (ev.code == ABS_MT_POSITION_X || ev.code == ABS_X) { st.x = ev.value; maybe_capture_start(st, ev); }
+        else if (ev.code == ABS_MT_POSITION_Y || ev.code == ABS_Y) { st.y = ev.value; maybe_capture_start(st, ev); }
         else if (ev.code == ABS_MT_TRACKING_ID) {
             if (ev.value >= 0) {
-                if (!st.touching) { st.touching = true; st.sx = st.x; st.sy = st.y; st.downTime = ev.time; }
+                if (!st.touching) { st.touching = true; st.startPending = true; st.sx = st.sy = -1; maybe_capture_start(st, ev); }
             } else if (st.touching) {
                 st.touching = false;
                 classify(st.sx, st.sy, st.x, st.y, ms_between(&st.downTime, &ev.time));
-                st.sx = st.sy = -1;
+                st.sx = st.sy = -1; st.startPending = false;
             }
         }
     } else if (ev.type == EV_KEY && ev.code == BTN_TOUCH) {
         if (ev.value) {
-            if (!st.touching) { st.touching = true; st.sx = st.x; st.sy = st.y; st.downTime = ev.time; }
+            if (!st.touching) { st.touching = true; st.startPending = true; st.sx = st.sy = -1; maybe_capture_start(st, ev); }
         } else if (st.touching) {
             st.touching = false;
             classify(st.sx, st.sy, st.x, st.y, ms_between(&st.downTime, &ev.time));
-            st.sx = st.sy = -1;
+            st.sx = st.sy = -1; st.startPending = false;
         }
     }
 }

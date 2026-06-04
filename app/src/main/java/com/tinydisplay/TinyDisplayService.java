@@ -385,10 +385,11 @@ public class TinyDisplayService extends Service {
         renderHandler.post(() -> {
             int dx = ex - sx, dy = ey - sy;
             int adx = Math.abs(dx), ady = Math.abs(dy);
-            // On the 340px round panel human swipes are often diagonal. Prefer
-            // left/right page navigation unless the drag is clearly vertical.
-            boolean horizontal = adx >= 40 && adx * 100 >= ady * 55;
-            boolean vertical = !horizontal && ady >= 40;
+            // The daemon already filtered taps vs swipes; here we only pick a
+            // direction. Whichever axis moved more wins (no dead zone), so even
+            // short diagonal flicks on the tiny panel register.
+            boolean horizontal = adx >= ady;
+            boolean vertical = !horizontal;
             Log.i(TAG, "Rear swipe dx=" + dx + " dy=" + dy + " horizontal=" + horizontal
                     + " page=" + pageName(currentPage));
             if (!subScreenPowered) {
