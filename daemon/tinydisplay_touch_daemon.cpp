@@ -70,8 +70,30 @@ static int open_hyn_ts(char* out, size_t out_len) {
     return fd;
 }
 
-static int open_f2_keys(char* out, size_t out_len) {
-    return open_named_input("yft-gpio-keys", out, out_len);
+// There are TWO "yft-gpio-keys" input nodes on this device (event2 and
+// event7); the physical F1/F2 buttons can emit on either, so we must open and
+// poll all of them rather than just the first match.
+static int open_all_named(const char* needle, int* fds, int max_fds) {
+    DIR* d = opendir("/dev/input");
+    if (!d) return 0;
+    int n = 0;
+    struct dirent* e;
+    while ((e = readdir(d)) != nullptr && n < max_fds) {
+        if (strncmp(e->d_name, "event", 5) != 0) continue;
+        char path[128];
+        snprintf(path, sizeof(path), "/dev/input/%s", e->d_name);
+        int fd = open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+        if (fd < 0) continue;
+        char name[256] = {0};
+        if (ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name) >= 0 && strstr(name, needle)) {
+            LOGI("selected key input %s (%s)", path, name);
+            fds[n++] = fd;
+        } else {
+            close(fd);
+        }
+    }
+    closedir(d);
+    return n;
 }
 
 static void send(const char* action, const char* extras) {
@@ -246,16 +268,16 @@ int main() {
         int grab = ioctl(touchFd, EVIOCGRAB, 1);
         LOGI("opened %s; EVIOCGRAB rc=%d", touchPath, grab);
 
-        char keyPath[128] = {0};
-        int keyFd = open_f2_keys(keyPath, sizeof(keyPath));
-        if (keyFd >= 0) LOGI("opened F2 key input %s", keyPath);
-        else LOGW("F2 key input not found; photo button disabled");
+        int keyFds[4];
+        int keyCount = open_all_named("yft-gpio-keys", keyFds, 4);
+        if (keyCount == 0) LOGW("F1/F2 key input not found; photo button disabled");
+        else LOGI("opened %d F1/F2 key input(s)", keyCount);
 
         TouchState st;
-        struct pollfd fds[2];
+        struct pollfd fds[5];
         fds[0].fd = touchFd; fds[0].events = POLLIN;
-        fds[1].fd = keyFd;   fds[1].events = keyFd >= 0 ? POLLIN : 0;
-        int nfds = keyFd >= 0 ? 2 : 1;
+        for (int i = 0; i < keyCount; i++) { fds[i + 1].fd = keyFds[i]; fds[i + 1].events = POLLIN; }
+        int nfds = 1 + keyCount;
 
         bool retry = false;
         while (!retry) {
@@ -280,7 +302,7 @@ int main() {
             }
         }
         close(touchFd);
-        if (keyFd >= 0) close(keyFd);
+        for (int i = 0; i < keyCount; i++) close(keyFds[i]);
         sleep(1);
     }
 }
