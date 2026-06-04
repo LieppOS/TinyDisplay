@@ -423,11 +423,14 @@ public class TinyDisplayService extends Service {
         renderHandler.post(() -> {
             int dx = ex - sx, dy = ey - sy;
             int adx = Math.abs(dx), ady = Math.abs(dy);
-            // The daemon already filtered taps vs swipes; here we only pick a
-            // direction. Whichever axis moved more wins (no dead zone), so even
-            // short diagonal flicks on the tiny panel register.
-            boolean horizontal = adx >= ady;
-            boolean vertical = !horizontal;
+            // The rear panel is tiny and round, so intended left/right swipes
+            // often contain a lot of vertical drift. On the clock hub vertical
+            // does nothing, so prefer horizontal whenever X moved meaningfully.
+            // On other pages, only treat it as vertical when Y clearly dominates.
+            boolean horizontal = (currentPage == PAGE_CLOCK)
+                    ? adx >= 12
+                    : (adx >= 12 && adx * 100 >= ady * 60);
+            boolean vertical = !horizontal && ady >= 12;
             Log.i(TAG, "Rear swipe dx=" + dx + " dy=" + dy + " horizontal=" + horizontal
                     + " page=" + pageName(currentPage));
             if (!subScreenPowered) {
@@ -571,7 +574,9 @@ public class TinyDisplayService extends Service {
         if (!dragDecided) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) < DRAG_DECIDE_PX) return;
             dragDecided = true;
-            boolean horizontal = Math.abs(dx) >= Math.abs(dy);
+            boolean horizontal = (currentPage == PAGE_CLOCK)
+                    ? Math.abs(dx) >= 12
+                    : (Math.abs(dx) >= 12 && Math.abs(dx) * 100 >= Math.abs(dy) * 60);
             if (horizontal && currentPage != PAGE_CAMERA) {
                 int nb = neighborForDrag(dx);
                 if (nb >= 0) {
