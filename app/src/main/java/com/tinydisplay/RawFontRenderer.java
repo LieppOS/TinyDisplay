@@ -127,6 +127,37 @@ public class RawFontRenderer {
     }
 
     /**
+     * Compose a horizontal page transition. {@code base} slides off while
+     * {@code incoming} slides in by {@code shift} pixels (0..W). When
+     * {@code fromRight} the incoming page enters from the right edge (base moves
+     * left); otherwise it enters from the left. Operates in logical pixel space
+     * via {@link #idx} so the 180° panel mapping is preserved.
+     */
+    public static byte[] compositeHorizontal(byte[] base, byte[] incoming, int shift, boolean fromRight) {
+        byte[] out = new byte[com.tinydisplay.hal.TinyLcdHal.FRAME_SIZE];
+        if (base == null) base = out;
+        if (incoming == null) incoming = out;
+        if (shift < 0) shift = 0;
+        if (shift > W) shift = W;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                byte[] src; int srcX;
+                if (fromRight) {
+                    if (x < W - shift) { src = base; srcX = x + shift; }
+                    else { src = incoming; srcX = x - (W - shift); }
+                } else {
+                    if (x >= shift) { src = base; srcX = x - shift; }
+                    else { src = incoming; srcX = (W - shift) + x; }
+                }
+                int si = idx(srcX, y), di = idx(x, y);
+                out[di] = src[si];
+                out[di + 1] = src[si + 1];
+            }
+        }
+        return out;
+    }
+
+    /**
      * Decode a panel frame back into an upright ARGB pixel array (W*H), so the
      * dashboard can mirror exactly what the rear screen shows. Reverses both the
      * RGB565 packing and the 180-degree panel mapping used by {@link #idx}.

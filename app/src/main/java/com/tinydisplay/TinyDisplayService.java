@@ -20,6 +20,8 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
@@ -41,6 +43,9 @@ import androidx.core.content.ContextCompat;
 
 import com.tinydisplay.hal.TinyLcdHal;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -125,6 +130,23 @@ public class TinyDisplayService extends Service {
     private Runnable pendingSingleTap;
     private boolean photoInProgress = false;
 
+    // ── Live drag (finger-following page transition) ─────────────────
+    private static final String TOUCH_SOCKET = "tinydisplay_touch";
+    private static final int DRAG_DECIDE_PX = 12;   // movement before we pick an axis
+    private static final float DRAG_COMMIT = 0.4f;  // fraction of width to switch pages
+    private static final int DRAG_SWIPE_MIN2 = 28 * 28;
+    private static final long DRAG_LONGPRESS_MS = 600;
+    private LocalServerSocket touchServer;
+    private volatile boolean touchServerRun = false;
+    private int dragStartX, dragStartY;
+    private long dragDownTime;
+    private boolean dragDecided = false;
+    private volatile boolean dragActive = false;
+    private int dragNeighbor = -1;
+    private boolean dragFromRight = false;
+    private byte[] dragBaseFrame, dragIncomingFrame;
+    private long lastDragRenderMs = 0;
+
     private SharedPreferences prefs;
     private SensorManager sensorManager;
     private Sensor proximitySensor;
@@ -157,6 +179,7 @@ public class TinyDisplayService extends Service {
         registerReceivers();
         registerPhoneListener();
         setupSensors();
+        startTouchServer();
 
         applyConfiguredState(false);
     }
@@ -256,6 +279,7 @@ public class TinyDisplayService extends Service {
 
     private void renderAndPushClock() {
         if (!subScreenPowered || aodActive || cameraMode || inCall) return;
+        if (dragActive) return; // don't fight the live drag compositor
         if (currentPage != PAGE_CLOCK) return;
         pushFrame(renderer.renderClock(batteryLevel, isCharging, getClockFace()));
         renderHandler.removeMessages(MSG_RENDER_CLOCK);
@@ -457,6 +481,152 @@ public class TinyDisplayService extends Service {
         if (notifIndex >= 0 && notifIndex < notifQueue.size()) notifQueue.remove(notifIndex);
         if (notifQueue.isEmpty()) setPage(PAGE_CLOCK);
         else { if (notifIndex >= notifQueue.size()) notifIndex = notifQueue.size() - 1; renderNotificationsPage(); }
+    }
+
+    // ── Live drag: page follows the finger ─────────────────────────
+
+    private void startTouchServer() {
+        touchServerRun = true;
+        Thread t = new Thread(this::touchServerLoop, "tinydisplay_touchsock");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void touchServerLoop() {
+        while (touchServerRun) {
+            try {
+                if (touchServer == null) touchServer = new LocalServerSocket(TOUCH_SOCKET);
+                LocalSocket c = touchServer.accept();
+                readTouchClient(c);
+            } catch (IOException e) {
+                Log.w(TAG, "touch server error: " + e.getMessage());
+                try { if (touchServer != null) touchServer.close(); } catch (Exception ignored) {}
+                touchServer = null;
+                try { Thread.sleep(800); } catch (InterruptedException ie) { return; }
+            }
+        }
+    }
+
+    private void readTouchClient(LocalSocket c) {
+        Log.i(TAG, "Rear touch stream connected");
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
+            String line;
+            while ((line = r.readLine()) != null) parseTouchLine(line);
+        } catch (IOException e) {
+            Log.i(TAG, "Rear touch stream closed: " + e.getMessage());
+        } finally {
+            try { c.close(); } catch (Exception ignored) {}
+            renderHandler.post(() -> { if (dragActive) { dragActive = false; snapBackCurrentPage(); } });
+        }
+    }
+
+    private void parseTouchLine(String line) {
+        try {
+            String[] p = line.trim().split("\\s+");
+            if (p.length < 3) return;
+            char k = p[0].charAt(0);
+            int x = Integer.parseInt(p[1]);
+            int y = Integer.parseInt(p[2]);
+            if (k == 'D') {
+                renderHandler.post(() -> onTouchDown(x, y));
+            } else if (k == 'M') {
+                renderHandler.post(() -> onTouchMove(x, y));
+            } else if (k == 'U') {
+                long held = p.length > 3 ? Long.parseLong(p[3]) : 0;
+                renderHandler.post(() -> onTouchUp(x, y, held));
+            }
+        } catch (NumberFormatException ignored) {}
+    }
+
+    private void onTouchDown(int x, int y) {
+        dragStartX = x; dragStartY = y;
+        dragDownTime = SystemClock.uptimeMillis();
+        dragDecided = false;
+        dragActive = false;
+        dragNeighbor = -1;
+        dragBaseFrame = null;
+        dragIncomingFrame = null;
+    }
+
+    private void onTouchMove(int x, int y) {
+        if (!subScreenPowered || aodActive || inCall) return;
+        int dx = x - dragStartX, dy = y - dragStartY;
+        if (!dragDecided) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) < DRAG_DECIDE_PX) return;
+            dragDecided = true;
+            boolean horizontal = Math.abs(dx) >= Math.abs(dy);
+            if (horizontal && currentPage != PAGE_CAMERA) {
+                int nb = neighborForDrag(dx);
+                if (nb >= 0) {
+                    dragNeighbor = nb;
+                    dragFromRight = dx < 0;
+                    dragBaseFrame = lastFrame != null ? lastFrame.clone() : renderPageFrame(currentPage);
+                    dragIncomingFrame = renderPageFrame(nb);
+                    dragActive = true;
+                }
+            }
+        }
+        if (dragActive) {
+            long now = SystemClock.uptimeMillis();
+            if (now - lastDragRenderMs < 16) return; // ~60fps cap
+            lastDragRenderMs = now;
+            float prog = Math.min(1f, Math.abs(dx) / (float) RawFontRenderer.W);
+            int shift = (int) (prog * RawFontRenderer.W);
+            pushFrame(RawFontRenderer.compositeHorizontal(dragBaseFrame, dragIncomingFrame, shift, dragFromRight));
+        }
+    }
+
+    private void onTouchUp(int x, int y, long heldMs) {
+        if (dragActive) {
+            int dx = x - dragStartX;
+            float prog = Math.min(1f, Math.abs(dx) / (float) RawFontRenderer.W);
+            dragActive = false;
+            if (prog >= DRAG_COMMIT) {
+                Log.i(TAG, "Drag commit -> " + pageName(dragNeighbor));
+                setPage(dragNeighbor);
+            } else {
+                Log.i(TAG, "Drag snap back to " + pageName(currentPage));
+                snapBackCurrentPage();
+            }
+            return;
+        }
+        int dx = x - dragStartX, dy = y - dragStartY;
+        int dist2 = dx * dx + dy * dy;
+        if (dist2 >= DRAG_SWIPE_MIN2) {
+            handleRearSwipe(dragStartX, dragStartY, x, y);
+        } else if (heldMs >= DRAG_LONGPRESS_MS) {
+            handleRearLongPress();
+        } else {
+            handleRearTap(x, y);
+        }
+    }
+
+    private int neighborForDrag(int dx) {
+        switch (currentPage) {
+            case PAGE_CLOCK:         return dx < 0 ? PAGE_NOTIFICATIONS : PAGE_CAMERA;
+            case PAGE_NOTIFICATIONS: return dx > 0 ? PAGE_CLOCK : -1;
+            default:                 return -1;
+        }
+    }
+
+    private void snapBackCurrentPage() {
+        if (currentPage == PAGE_NOTIFICATIONS) renderNotificationsPage();
+        else scheduleClockUpdate(0);
+    }
+
+    private byte[] renderPageFrame(int page) {
+        switch (page) {
+            case PAGE_NOTIFICATIONS:
+                if (notifQueue.isEmpty()) return RawFontRenderer.renderText("No notifications", 3);
+                int i = Math.max(0, Math.min(notifIndex, notifQueue.size() - 1));
+                Notif n = notifQueue.get(i);
+                return renderer.renderNotification(n.app, n.title, n.text, i, notifQueue.size());
+            case PAGE_CAMERA:
+                return RawFontRenderer.renderText("CAMERA", 6);
+            case PAGE_CLOCK:
+            default:
+                return renderer.renderClock(batteryLevel, isCharging, getClockFace());
+        }
     }
 
     private void scrollNotifications(int delta) {
@@ -917,6 +1087,8 @@ public class TinyDisplayService extends Service {
     public void onDestroy() {
         super.onDestroy();
         instance = null;
+        touchServerRun = false;
+        try { if (touchServer != null) touchServer.close(); } catch (Exception ignored) {}
         try { unregisterReceiver(batteryReceiver); } catch (Exception ignored) {}
         try { unregisterReceiver(timeReceiver); } catch (Exception ignored) {}
         try { unregisterReceiver(screenReceiver); } catch (Exception ignored) {}

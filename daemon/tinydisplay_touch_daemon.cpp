@@ -4,10 +4,13 @@
 #include <fcntl.h>
 #include <linux/input.h>
 #include <poll.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #define TAG "TinyTouchDaemon"
@@ -111,6 +114,38 @@ static long ms_between(const struct timeval* a, const struct timeval* b) {
     return (b->tv_sec - a->tv_sec) * 1000L + (b->tv_usec - a->tv_usec) / 1000L;
 }
 
+// ── Live touch stream (abstract UNIX socket to TinyDisplayService) ────────
+// When the service is listening we stream raw down/move/up so the UI can make
+// the next page follow the finger. If we cannot connect we silently fall back
+// to the discrete tap/swipe intents below.
+static const char* STREAM_NAME = "tinydisplay_touch";
+static int g_stream_fd = -1;
+
+static bool stream_connect() {
+    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return false;
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    addr.sun_path[0] = '\0';  // abstract namespace
+    strncpy(addr.sun_path + 1, STREAM_NAME, sizeof(addr.sun_path) - 2);
+    socklen_t len = offsetof(struct sockaddr_un, sun_path) + 1 + strlen(STREAM_NAME);
+    if (connect(fd, (struct sockaddr*)&addr, len) < 0) { close(fd); return false; }
+    g_stream_fd = fd;
+    LOGI("connected live touch stream");
+    return true;
+}
+
+static bool stream_send(const char* line) {
+    if (g_stream_fd < 0) return false;
+    size_t n = strlen(line);
+    ssize_t w = write(g_stream_fd, line, n);
+    if (w != (ssize_t)n) { close(g_stream_fd); g_stream_fd = -1; return false; }
+    return true;
+}
+
+static bool stream_connected() { return g_stream_fd >= 0; }
+
 static void classify(int sx, int sy, int ex, int ey, long heldMs) {
     if (sx < 0 || sy < 0 || ex < 0 || ey < 0) return;
     int dx = ex - sx, dy = ey - sy;
@@ -122,10 +157,47 @@ static void classify(int sx, int sy, int ex, int ey, long heldMs) {
 
 struct TouchState {
     int x = -1, y = -1, sx = -1, sy = -1;
+    int lastSentX = -1, lastSentY = -1;
     bool touching = false;
     bool startPending = false;
+    bool streaming = false;  // streaming this particular gesture
     struct timeval downTime = {0, 0};
 };
+
+static void stream_begin(TouchState& st) {
+    char line[64];
+    snprintf(line, sizeof(line), "D %d %d\n", st.sx, st.sy);
+    st.streaming = stream_send(line);
+    st.lastSentX = st.sx; st.lastSentY = st.sy;
+}
+
+static void stream_move(TouchState& st) {
+    if (!st.streaming) return;
+    if (abs(st.x - st.lastSentX) + abs(st.y - st.lastSentY) < 2) return;
+    char line[64];
+    snprintf(line, sizeof(line), "M %d %d\n", st.x, st.y);
+    if (stream_send(line)) { st.lastSentX = st.x; st.lastSentY = st.y; }
+    else st.streaming = false;
+}
+
+static void touch_down(TouchState& st) {
+    // Try to (re)connect lazily so the feature works as soon as the service
+    // comes up, without busy-looping when it is absent.
+    if (!stream_connected()) stream_connect();
+    if (stream_connected()) stream_begin(st);
+}
+
+static void touch_up(TouchState& st, const struct input_event& ev) {
+    long held = ms_between(&st.downTime, &ev.time);
+    if (st.streaming) {
+        char line[64];
+        snprintf(line, sizeof(line), "U %d %d %ld\n", st.x, st.y, held);
+        stream_send(line);
+    } else {
+        classify(st.sx, st.sy, st.x, st.y, held);
+    }
+    st.streaming = false;
+}
 
 // Capture the swipe start as soon as we have valid coordinates after a down
 // event. Some drivers report TRACKING_ID/BTN_TOUCH before the first X/Y, which
@@ -133,19 +205,20 @@ struct TouchState {
 static void maybe_capture_start(TouchState& st, const struct input_event& ev) {
     if (st.startPending && st.x >= 0 && st.y >= 0) {
         st.sx = st.x; st.sy = st.y; st.downTime = ev.time; st.startPending = false;
+        touch_down(st);
     }
 }
 
 static void handle_touch_event(TouchState& st, const struct input_event& ev) {
     if (ev.type == EV_ABS) {
-        if (ev.code == ABS_MT_POSITION_X || ev.code == ABS_X) { st.x = ev.value; maybe_capture_start(st, ev); }
-        else if (ev.code == ABS_MT_POSITION_Y || ev.code == ABS_Y) { st.y = ev.value; maybe_capture_start(st, ev); }
+        if (ev.code == ABS_MT_POSITION_X || ev.code == ABS_X) { st.x = ev.value; maybe_capture_start(st, ev); stream_move(st); }
+        else if (ev.code == ABS_MT_POSITION_Y || ev.code == ABS_Y) { st.y = ev.value; maybe_capture_start(st, ev); stream_move(st); }
         else if (ev.code == ABS_MT_TRACKING_ID) {
             if (ev.value >= 0) {
                 if (!st.touching) { st.touching = true; st.startPending = true; st.sx = st.sy = -1; maybe_capture_start(st, ev); }
             } else if (st.touching) {
                 st.touching = false;
-                classify(st.sx, st.sy, st.x, st.y, ms_between(&st.downTime, &ev.time));
+                touch_up(st, ev);
                 st.sx = st.sy = -1; st.startPending = false;
             }
         }
@@ -154,7 +227,7 @@ static void handle_touch_event(TouchState& st, const struct input_event& ev) {
             if (!st.touching) { st.touching = true; st.startPending = true; st.sx = st.sy = -1; maybe_capture_start(st, ev); }
         } else if (st.touching) {
             st.touching = false;
-            classify(st.sx, st.sy, st.x, st.y, ms_between(&st.downTime, &ev.time));
+            touch_up(st, ev);
             st.sx = st.sy = -1; st.startPending = false;
         }
     }
