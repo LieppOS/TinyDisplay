@@ -230,17 +230,28 @@ public class TinyDisplayService extends Service {
     private void powerOffSubScreen() {
         if (!ensureHalReady()) return;
         stopCameraModeLocked();
+        dragActive = false;
+        renderHandler.removeCallbacks(dragWatchdog);
         renderHandler.removeMessages(MSG_RENDER_CLOCK);
         renderHandler.removeMessages(MSG_RENDER_AOD);
-        // Soft-off: keep controller/touch powered so rear double-tap can wake it.
-        // Full hal.setPower(0)/setBlEnable(0) can also kill the rear digitizer on
-        // this device, making wake-by-touch impossible.
         pushFrame(new byte[TinyLcdHal.FRAME_SIZE]);
-        hal.setBacklight(0);
         lastFrameSize = -1;
         subScreenPowered = false;
         aodActive = false;
-        Log.i(TAG, "Sub-screen soft-off (touch wake kept alive)");
+        if (!prefs.getBoolean("sub_screen_enabled", false)) {
+            // Master switch is OFF: fully power down the panel. No touch-wake is
+            // wanted here — it stays off until re-enabled in settings.
+            hal.setBacklight(0);
+            hal.setBlEnable(0);
+            hal.setPower(0);
+            Log.i(TAG, "Sub-screen hard-off (master disabled)");
+        } else {
+            // Temporary off (double-tap power / pocket / AOD exit): keep the
+            // controller + touch powered so a rear double-tap can wake it. Full
+            // setPower(0) can kill the rear digitizer on this device.
+            hal.setBacklight(0);
+            Log.i(TAG, "Sub-screen soft-off (touch wake kept alive)");
+        }
     }
 
     private boolean isMainScreenInteractive() {
@@ -543,6 +554,7 @@ public class TinyDisplayService extends Service {
 
     private void onTouchDown(int x, int y) {
         renderHandler.removeCallbacks(dragWatchdog);
+        if (!prefs.getBoolean("sub_screen_enabled", false)) return; // master off: ignore
         dragStartX = x; dragStartY = y; dragLastX = x;
         dragDownTime = SystemClock.uptimeMillis();
         dragDecided = false;
@@ -553,6 +565,7 @@ public class TinyDisplayService extends Service {
     }
 
     private void onTouchMove(int x, int y) {
+        if (!prefs.getBoolean("sub_screen_enabled", false)) return; // master off
         if (!subScreenPowered || aodActive || inCall) return;
         int dx = x - dragStartX, dy = y - dragStartY;
         if (!dragDecided) {
