@@ -47,6 +47,12 @@ public class NotificationListener extends NotificationListenerService {
         if (svc != null) {
             svc.onExternalNotification(appName, titleText, bodyText);
         } else {
+            // Don't spawn the service just to drop the notification when the
+            // sub-screen is disabled — keeps it from lingering as a battery user.
+            if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+                    .getBoolean("sub_screen_enabled", false)) {
+                return;
+            }
             Intent intent = new Intent(this, TinyDisplayService.class);
             intent.setAction(TinyDisplayService.ACTION_SHOW_NOTIFICATION);
             intent.putExtra(TinyDisplayService.EXTRA_NOTIF_APP, appName);

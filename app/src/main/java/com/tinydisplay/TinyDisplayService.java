@@ -288,6 +288,19 @@ public class TinyDisplayService extends Service {
             } else {
                 renderHandler.removeMessages(MSG_RENDER_CLOCK);
                 powerOffSubScreen();
+                // When the master switch is OFF there is nothing for the service
+                // to do, so fully stop it instead of lingering as a 24/7
+                // foreground service (which shows up as a battery user). It is
+                // restarted by the settings toggle / boot when re-enabled.
+                if (!prefs.getBoolean("sub_screen_enabled", false) && !inCall) {
+                    Log.i(TAG, "Sub-screen disabled — stopping service to save battery");
+                    if (sensorManager != null && sensorsRegistered) {
+                        try { sensorManager.unregisterListener(proximityListener); } catch (Exception ignored) {}
+                        sensorsRegistered = false;
+                    }
+                    stopForeground(STOP_FOREGROUND_REMOVE);
+                    stopSelf();
+                }
             }
         });
     }
@@ -1125,6 +1138,12 @@ public class TinyDisplayService extends Service {
             return START_STICKY;
         }
         if (ACTION_SHOW_NOTIFICATION.equals(action)) {
+            if (!prefs.getBoolean("sub_screen_enabled", false)) {
+                // Disabled: don't linger just because a notification arrived.
+                stopForeground(STOP_FOREGROUND_REMOVE);
+                stopSelf();
+                return START_NOT_STICKY;
+            }
             onExternalNotification(intent.getStringExtra(EXTRA_NOTIF_APP),
                     intent.getStringExtra(EXTRA_NOTIF_TITLE), intent.getStringExtra(EXTRA_NOTIF_TEXT));
             return START_STICKY;
